@@ -1,22 +1,22 @@
-﻿# ⚖️ AI Devil's Advocate — Multi-Agent Debate Application
+﻿#  AI Devil's Advocate — Multi-Agent Debate Application
 
 An autonomous multi-agent debate application built with **Python**, **LangGraph**, and **Streamlit**. Supports multiple free-tier and cloud LLM providers (**Groq**, **Google Gemini**, **OpenRouter**) with automatic 429 rate-limit fallback, polished animated UI, and formatted PDF/Markdown exports.
 
 ---
 
-## 🌟 Key Features
+##  Key Features
 
 1. **Multi-Provider Architecture:**
    - **Groq:** Ultra-low latency (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`, `llama-3.1-8b-instant`, `llama-3.3-70b-versatile`, etc.)
    - **Google Gemini:** Google GenAI (`gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`)
    - **OpenRouter:** Unified API (`meta-llama/llama-3.1-8b-instruct:free`, `google/gemini-2.0-flash-exp:free`, etc.)
-2. **🛡️ Automatic Rate-Limit (429) Fallback:**
+2. ** Automatic Rate-Limit (429) Fallback:**
    - If your active provider hits a rate limit or quota exhaustion, the app automatically switches to your next configured provider on the fly with zero interruption to the ongoing debate.
-3. **🎨 Polished UI & Animations:**
+3. ** Polished UI & Animations:**
    - Google Fonts (Inter / Poppins), smooth message fade-in animations, bouncing typing/thinking dots, and custom stylized debater & verdict cards.
-4. **📥 Transcript Exports:**
+4. ** Transcript Exports:**
    - 1-click downloads for styled **PDF** (`.pdf`) and formatted **Markdown** (`.md`).
-5. **📊 Session API Call Counter:**
+5. ** Session API Call Counter:**
    - Real-time counter in the sidebar to monitor your free-tier usage.
 
 ---
@@ -36,7 +36,7 @@ An autonomous multi-agent debate application built with **Python**, **LangGraph*
 
 ---
 
-## 🚀 Quick Start (Local Setup)
+##  Quick Start (Local Setup)
 
 ### 1. Clone or Open the Repository
 ```bash
