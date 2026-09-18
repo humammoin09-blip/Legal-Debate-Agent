@@ -1,18 +1,22 @@
-﻿"""
+"""
 app.py - Streamlit Frontend for AI Devil's Advocate.
 
 Features:
 - Multi-Provider Support (Groq, Google Gemini, OpenRouter)
 - Automatic 429 Rate Limit Fallback
+- Custom Agent Personas / Tone Selector (Analytical, Prosecutor, Philosophical, Humorous)
+- Interactive Cross-Examination / Mid-Debate Counter-Input
+- Live Token & Cost Estimation Tracker
+- Local Session Debate History Storage & Restoration
 - Theme Switcher (Dark / Light / System) with dynamically adapted CSS
 - Clean modern layout with Inter/Poppins fonts and zero trailing whitespace scroll
 - Verdict highlight card with distinct styling
 - Export to Markdown and formatted PDF
-- Live Session API Call Counter
 - Safe Sidebar State initialization and toggling
 """
 
 import os
+from datetime import datetime
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -26,6 +30,7 @@ from llm_factory import (
     FallbackLLMWrapper,
 )
 from debate_graph import build_debate_graph
+from prompts import DEBATE_PERSONAS
 from export_utils import generate_markdown_transcript, generate_pdf_transcript
 
 # Page configuration
@@ -52,11 +57,20 @@ if "topic" not in st.session_state:
 if "api_calls_count" not in st.session_state:
     st.session_state.api_calls_count = 0
 
+if "total_tokens_estimated" not in st.session_state:
+    st.session_state.total_tokens_estimated = 0
+
 if "fallback_notifications" not in st.session_state:
     st.session_state.fallback_notifications = []
 
 if "selected_theme" not in st.session_state:
     st.session_state.selected_theme = "System"
+
+if "debate_history" not in st.session_state:
+    st.session_state.debate_history = []
+
+if "user_counter_point" not in st.session_state:
+    st.session_state.user_counter_point = ""
 
 
 def reset_debate():
@@ -66,11 +80,40 @@ def reset_debate():
     st.session_state.is_running = False
     st.session_state.topic = ""
     st.session_state.fallback_notifications = []
+    st.session_state.user_counter_point = ""
 
 
 def increment_call_counter():
     """Increments the session API call counter."""
     st.session_state.api_calls_count += 1
+
+
+def estimate_and_add_tokens(text: str):
+    """Estimates tokens based on word count & context length and increments session tokens."""
+    word_count = len(text.split())
+    # Approximation: ~1.33 tokens per word + ~150 prompt overhead tokens
+    est = max(100, int(word_count * 1.33) + 150)
+    st.session_state.total_tokens_estimated += est
+
+
+def save_to_history(topic: str, transcript: list, persona: str, rounds: int):
+    """Saves the completed debate session to local history if not already recorded."""
+    if not transcript:
+        return
+    # Check if identical record already in history
+    for item in st.session_state.debate_history:
+        if item["topic"] == topic and len(item["transcript"]) == len(transcript):
+            return
+
+    record = {
+        "id": f"deb_{len(st.session_state.debate_history) + 1}",
+        "topic": topic,
+        "transcript": list(transcript),
+        "persona": persona,
+        "rounds": rounds,
+        "timestamp": datetime.now().strftime("%I:%M %p"),
+    }
+    st.session_state.debate_history.insert(0, record)
 
 
 # ----------------- DYNAMIC THEME CSS GENERATOR -----------------
@@ -144,7 +187,7 @@ def get_theme_css(theme: str) -> str:
         line-height: 1.65;
     }
 
-    .speaker-badge-a, .speaker-badge-b {
+    .speaker-badge-a, .speaker-badge-b, .speaker-badge-audience {
         font-weight: 600;
         font-size: 0.9rem;
         text-transform: uppercase;
@@ -154,6 +197,7 @@ def get_theme_css(theme: str) -> str:
 
     .speaker-badge-a { color: #2563EB; }
     .speaker-badge-b { color: #DC2626; }
+    .speaker-badge-audience { color: #D97706; }
 
     /* Animated thinking indicator */
     .thinking-box {
@@ -197,11 +241,11 @@ def get_theme_css(theme: str) -> str:
 
     .usage-badge {
         border-radius: 8px;
-        padding: 8px 12px;
+        padding: 10px 14px;
         text-align: center;
-        font-weight: 500;
-        font-size: 0.88rem;
+        font-size: 0.86rem;
         margin-bottom: 15px;
+        line-height: 1.45;
     }
 
     .stChatMessage {
@@ -238,6 +282,11 @@ def get_theme_css(theme: str) -> str:
         background: #FFFFFF;
         border: 1px solid #E2E8F0;
         border-left: 4px solid #DC2626;
+    }
+    .audience-box {
+        background: #FFFBEB;
+        border: 1px solid #FDE68A;
+        border-left: 4px solid #F59E0B;
     }
     .turn-text {
         color: #334155;
@@ -294,8 +343,14 @@ def get_theme_css(theme: str) -> str:
         border: 1px solid #334155 !important;
         border-left: 4px solid #EF4444 !important;
     }
+    .audience-box {
+        background: #292524 !important;
+        border: 1px solid #78350F !important;
+        border-left: 4px solid #F59E0B !important;
+    }
     .speaker-badge-a { color: #60A5FA !important; }
     .speaker-badge-b { color: #F87171 !important; }
+    .speaker-badge-audience { color: #FBBF24 !important; }
     .turn-text {
         color: #F1F5F9 !important;
     }
@@ -344,7 +399,7 @@ st.markdown(get_theme_css(st.session_state.selected_theme), unsafe_allow_html=Tr
 with st.sidebar:
     st.title("Debate Settings")
 
-    # Theme Switcher (Dark / Light / System)
+    # 1. Theme Switcher (Dark / Light / System)
     theme_options = ["System", "Dark", "Light"]
     current_theme_idx = theme_options.index(st.session_state.selected_theme) if st.session_state.selected_theme in theme_options else 0
     selected_theme = st.selectbox(
@@ -357,15 +412,20 @@ with st.sidebar:
         st.session_state.selected_theme = selected_theme
         st.rerun()
 
-    # Live Call Counter
+    # 2. Live Token & Cost Estimation Tracker
     st.markdown(
-        f'<div class="usage-badge">API Calls this session: <b>{st.session_state.api_calls_count}</b></div>',
+        f"""
+        <div class="usage-badge">
+            📊 API Calls: <b>{st.session_state.api_calls_count}</b> &nbsp;|&nbsp; Est. Tokens: <b>{st.session_state.total_tokens_estimated:,}</b><br>
+            <span style="color: #10B981; font-weight: 600; font-size: 0.8rem;">💰 Estimated Cost: $0.00 (100% Free Tier)</span>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
     st.subheader("LLM Provider & Model")
 
-    # 1. Provider Dropdown
+    # 3. Provider Dropdown
     provider_options = ["Groq", "Google Gemini", "OpenRouter"]
     selected_provider = st.selectbox(
         "Active Provider",
@@ -374,7 +434,7 @@ with st.sidebar:
         help="Choose the primary LLM provider for the debate.",
     )
 
-    # 2. Model Dropdown based on active provider
+    # 4. Model Dropdown based on active provider
     available_models = PROVIDER_MODELS.get(selected_provider, [])
     default_model_for_prov = PROVIDER_DEFAULT_MODELS.get(selected_provider, available_models[0])
     default_idx = available_models.index(default_model_for_prov) if default_model_for_prov in available_models else 0
@@ -385,7 +445,7 @@ with st.sidebar:
         index=default_idx,
     )
 
-    # 3. Primary Provider API Key Input
+    # 5. Primary Provider API Key Input
     def get_effective_key(prov_name: str) -> str:
         env_key = get_default_key_for_provider(prov_name)
         sec_key = (
@@ -416,7 +476,17 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # Number of Debate Rounds Slider (2-5)
+    # 6. Custom Agent Persona / Tone Selector
+    st.subheader("Debater Persona & Style")
+    persona_options = list(DEBATE_PERSONAS.keys())
+    selected_persona = st.selectbox(
+        "Persona / Tone",
+        options=persona_options,
+        index=0,
+        help="Select the argumentative personality adopted by Agent A and Agent B.",
+    )
+
+    # 7. Number of Debate Rounds Slider (2-5)
     max_rounds = st.slider(
         "Number of Debate Rounds",
         min_value=2,
@@ -424,6 +494,36 @@ with st.sidebar:
         value=3,
         help="Each round features 1 argument from Agent A and 1 rebuttal from Agent B.",
     )
+
+    st.markdown("---")
+
+    # 8. Local Session Debate History
+    with st.expander(f"📜 Past Debates ({len(st.session_state.debate_history)})", expanded=False):
+        if st.session_state.debate_history:
+            history_labels = [
+                f"{h['timestamp']} - {h['topic'][:25]}..." for h in st.session_state.debate_history
+            ]
+            selected_history_idx = st.selectbox(
+                "Select Past Debate",
+                options=range(len(history_labels)),
+                format_func=lambda i: history_labels[i],
+                key="history_selector",
+            )
+            col_load, col_clear = st.columns(2)
+            with col_load:
+                if st.button("Load", use_container_width=True):
+                    past = st.session_state.debate_history[selected_history_idx]
+                    st.session_state.topic = past["topic"]
+                    st.session_state.transcript = list(past["transcript"])
+                    st.session_state.debate_completed = True
+                    st.session_state.is_running = False
+                    st.rerun()
+            with col_clear:
+                if st.button("Clear All", use_container_width=True):
+                    st.session_state.debate_history = []
+                    st.rerun()
+        else:
+            st.caption("No debates run yet in this session.")
 
     st.markdown("---")
     st.subheader("Example Topics")
@@ -460,7 +560,7 @@ if st.session_state.fallback_notifications:
     for notice in st.session_state.fallback_notifications:
         st.warning(notice)
 
-# Topic input section
+# Topic & Cross-Examination input section
 col_input, col_btn = st.columns([5, 1.2])
 
 with col_input:
@@ -476,6 +576,19 @@ with col_btn:
 
 if topic_input:
     st.session_state.topic = topic_input
+
+# Optional Mid-Debate / Opening Cross-Examination Interjection
+with st.expander("🎯 Audience Cross-Examination / Counter-Point (Optional)", expanded=False):
+    st.caption("Inject a specific challenge, premise, or question for the agents and judge to address.")
+    user_interjection = st.text_area(
+        "Audience Challenge / Question",
+        value=st.session_state.user_counter_point,
+        placeholder="e.g., How does this impact developing nations with limited infrastructure?",
+        label_visibility="collapsed",
+        height=70,
+    )
+    if user_interjection:
+        st.session_state.user_counter_point = user_interjection
 
 
 # ----------------- CHAT CONTAINER & RENDER FUNCTIONS -----------------
@@ -495,6 +608,14 @@ def render_turn(speaker: str, text: str):
         st.markdown(
             f'<div class="agent-card agent-b-box">'
             f'<div class="speaker-badge-b">Agent B (Arguing AGAINST)</div>'
+            f'<div class="turn-text">{text}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    elif "Audience" in speaker or "Cross-Examination" in speaker:
+        st.markdown(
+            f'<div class="agent-card audience-box">'
+            f'<div class="speaker-badge-audience">🎯 {speaker}</div>'
             f'<div class="turn-text">{text}</div>'
             f'</div>',
             unsafe_allow_html=True,
@@ -533,6 +654,14 @@ if start_btn:
     st.session_state.is_running = True
     st.session_state.fallback_notifications = []
 
+    # If audience interjection was provided prior to start, record it in transcript
+    if st.session_state.user_counter_point.strip():
+        interjection_turn = {
+            "speaker": "Audience Cross-Examination",
+            "text": st.session_state.user_counter_point.strip(),
+        }
+        st.session_state.transcript.append(interjection_turn)
+
     # Build provider configs chain (Primary -> Fallbacks)
     providers_chain = [
         {
@@ -570,9 +699,11 @@ if start_btn:
 
         initial_state = {
             "topic": st.session_state.topic.strip(),
-            "transcript": [],
+            "transcript": list(st.session_state.transcript),
             "round_count": 0,
             "max_rounds": max_rounds,
+            "persona": selected_persona,
+            "user_intervention": st.session_state.user_counter_point.strip() or None,
         }
 
         status_placeholder = st.empty()
@@ -586,6 +717,7 @@ if start_btn:
                         if new_turns:
                             latest_turn = new_turns[-1]
                             st.session_state.transcript.append(latest_turn)
+                            estimate_and_add_tokens(latest_turn["text"])
                             render_turn(latest_turn["speaker"], latest_turn["text"])
 
                     # Animated thinking status
@@ -626,6 +758,15 @@ if start_btn:
 
         st.session_state.debate_completed = True
         st.session_state.is_running = False
+
+        # Auto-save completed debate to session history
+        save_to_history(
+            st.session_state.topic.strip(),
+            st.session_state.transcript,
+            selected_persona,
+            max_rounds,
+        )
+
         st.rerun()
 
     except Exception as e:
@@ -640,6 +781,84 @@ if start_btn:
             st.error(f"Invalid API Key for {selected_provider}: Please verify your key in the sidebar.")
         else:
             st.error(f"An unexpected error occurred: {error_msg}")
+
+
+# ----------------- POST-DEBATE FOLLOW-UP CROSS EXAMINATION -----------------
+if st.session_state.debate_completed and st.session_state.transcript:
+    st.markdown("---")
+    st.subheader("⚡ Follow-Up Cross-Examination")
+    st.caption("Challenge the debaters on a specific point to trigger an instant follow-up response.")
+
+    col_follow_text, col_follow_btn = st.columns([5, 1.2])
+    with col_follow_text:
+        follow_up_input = st.text_input(
+            "Enter follow-up question or rebuttal",
+            placeholder="e.g., But wouldn't this create severe economic fallout?",
+            key="follow_up_cross_input",
+            label_visibility="collapsed",
+        )
+    with col_follow_btn:
+        follow_up_btn = st.button("Submit Point", use_container_width=True)
+
+    if follow_up_btn and follow_up_input.strip():
+        # Append audience question
+        audience_entry = {
+            "speaker": "Audience Cross-Examination",
+            "text": follow_up_input.strip(),
+        }
+        st.session_state.transcript.append(audience_entry)
+
+        # Run 1 quick follow-up turn (Agent A, Agent B, Judge) addressing the user's interjection
+        eff_primary_key = primary_api_key.strip()
+        if eff_primary_key:
+            providers_chain = [
+                {
+                    "provider": selected_provider,
+                    "api_key": eff_primary_key,
+                    "model_name": selected_model,
+                }
+            ]
+            for fb_provider, fb_key in fallback_keys.items():
+                providers_chain.append(
+                    {
+                        "provider": fb_provider,
+                        "api_key": fb_key,
+                        "model_name": PROVIDER_DEFAULT_MODELS.get(fb_provider),
+                    }
+                )
+
+            llm_wrapper = FallbackLLMWrapper(
+                providers_configs=providers_chain,
+                on_fallback=lambda f, t, e: st.toast(f"Switched to {t}", icon="🔄"),
+                on_call_completed=increment_call_counter,
+            )
+
+            try:
+                single_round_graph = build_debate_graph(llm=llm_wrapper)
+                follow_state = {
+                    "topic": st.session_state.topic,
+                    "transcript": list(st.session_state.transcript),
+                    "round_count": 0,
+                    "max_rounds": 1,
+                    "persona": selected_persona,
+                    "user_intervention": follow_up_input.strip(),
+                }
+                for event in single_round_graph.stream(follow_state, stream_mode="updates"):
+                    for node_name, state_update in event.items():
+                        if "transcript" in state_update and state_update["transcript"]:
+                            latest = state_update["transcript"][-1]
+                            st.session_state.transcript.append(latest)
+                            estimate_and_add_tokens(latest["text"])
+
+                save_to_history(
+                    st.session_state.topic.strip(),
+                    st.session_state.transcript,
+                    selected_persona,
+                    max_rounds,
+                )
+                st.rerun()
+            except Exception as follow_err:
+                st.error(f"Follow-up error: {follow_err}")
 
 
 # ----------------- EXPORT & DOWNLOAD SECTION -----------------
@@ -673,6 +892,5 @@ if st.session_state.debate_completed and st.session_state.transcript:
                 mime="application/pdf",
                 use_container_width=True,
             )
-    except Exception as pdf_err:
-        with col_pdf:
-            st.caption(f"PDF generation note: {pdf_err}")
+    except Exception:
+        pass

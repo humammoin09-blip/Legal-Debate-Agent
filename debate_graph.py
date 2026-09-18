@@ -2,27 +2,30 @@
 debate_graph.py - LangGraph orchestration for AI Devil's Advocate.
 
 Defines the multi-agent state schema, debater nodes, judge node,
-and conditional routing logic. Accepts provider-agnostic LLM clients.
+and conditional routing logic. Accepts provider-agnostic LLM clients,
+persona styles, and audience cross-examination interjections.
 """
 
 from typing import TypedDict, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from prompts import get_agent_prompt
+from prompts import get_agent_prompt, DEBATE_PERSONAS
 from llm_factory import create_llm, FallbackLLMWrapper, PROVIDER_DEFAULT_MODELS
 
 
 class Turn(TypedDict):
-    speaker: str  # "Agent A" | "Agent B" | "Judge"
+    speaker: str  # "Agent A" | "Agent B" | "Judge" | "Audience"
     text: str
 
 
-class DebateState(TypedDict):
+class DebateState(TypedDict, total=False):
     topic: str
     transcript: List[Dict[str, str]]
     round_count: int
     max_rounds: int
+    persona: str
+    user_intervention: Optional[str]
 
 
 def build_debate_graph(
@@ -47,7 +50,15 @@ def build_debate_graph(
         Agent A node: Argues FOR the topic.
         Reads the full transcript so far and generates the next argument.
         """
-        messages_spec = get_agent_prompt("Agent A", state["topic"], state["transcript"])
+        persona = state.get("persona", "Analytical & Balanced")
+        user_intervention = state.get("user_intervention", None)
+        messages_spec = get_agent_prompt(
+            "Agent A",
+            state["topic"],
+            state["transcript"],
+            persona=persona,
+            user_intervention=user_intervention,
+        )
         lc_messages = [
             SystemMessage(content=messages_spec[0]["content"]),
             HumanMessage(content=messages_spec[1]["content"]),
@@ -64,7 +75,15 @@ def build_debate_graph(
         Reads the full transcript (including Agent A's latest response) and rebuts.
         Increments the round_count.
         """
-        messages_spec = get_agent_prompt("Agent B", state["topic"], state["transcript"])
+        persona = state.get("persona", "Analytical & Balanced")
+        user_intervention = state.get("user_intervention", None)
+        messages_spec = get_agent_prompt(
+            "Agent B",
+            state["topic"],
+            state["transcript"],
+            persona=persona,
+            user_intervention=user_intervention,
+        )
         lc_messages = [
             SystemMessage(content=messages_spec[0]["content"]),
             HumanMessage(content=messages_spec[1]["content"]),
@@ -81,7 +100,15 @@ def build_debate_graph(
         Judge node: Evaluates the complete debate after max rounds are reached.
         Provides a neutral, structured verdict.
         """
-        messages_spec = get_agent_prompt("Judge", state["topic"], state["transcript"])
+        persona = state.get("persona", "Analytical & Balanced")
+        user_intervention = state.get("user_intervention", None)
+        messages_spec = get_agent_prompt(
+            "Judge",
+            state["topic"],
+            state["transcript"],
+            persona=persona,
+            user_intervention=user_intervention,
+        )
         lc_messages = [
             SystemMessage(content=messages_spec[0]["content"]),
             HumanMessage(content=messages_spec[1]["content"]),
