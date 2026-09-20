@@ -170,6 +170,7 @@ def create_llm(
         os.environ["GROQ_API_KEY"] = clean_key
         return ChatGroq(
             groq_api_key=clean_key,
+            api_key=clean_key,
             model_name=model,
             temperature=temperature,
         )

@@ -519,7 +519,10 @@ with st.sidebar:
         key=f"primary_api_key_input_{selected_provider}",
     )
     if primary_api_key.strip():
-        st.session_state[f"api_key_{selected_provider}"] = primary_api_key.strip().strip("'\"")
+        clean_p_key = primary_api_key.strip().strip("'\"")
+        st.session_state[f"api_key_{selected_provider}"] = clean_p_key
+        if selected_provider == "Groq":
+            os.environ["GROQ_API_KEY"] = clean_p_key
 
     # Direct API key creation link for active provider
     provider_link = PROVIDER_KEY_LINKS.get(selected_provider, "")
@@ -731,8 +734,8 @@ if start_btn:
 
     # 2. Validation: Active Provider API Key (prioritizing dynamic input)
     eff_primary_key = (
-        st.session_state.get(f"api_key_{selected_provider}", "")
-        or primary_api_key.strip().strip("'\"")
+        primary_api_key.strip().strip("'\"")
+        or st.session_state.get(f"api_key_{selected_provider}", "")
         or get_effective_key(selected_provider)
     ).strip().strip("'\"")
     if not eff_primary_key:
