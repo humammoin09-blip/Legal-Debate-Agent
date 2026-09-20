@@ -1,4 +1,4 @@
-﻿"""
+"""
 debate_graph.py - LangGraph orchestration for AI Devil's Advocate.
 
 Defines the multi-agent state schema, debater nodes, judge node,
@@ -11,7 +11,7 @@ from langgraph.graph import StateGraph, START, END
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from prompts import get_agent_prompt, DEBATE_PERSONAS
-from llm_factory import create_llm, FallbackLLMWrapper, PROVIDER_DEFAULT_MODELS
+from llm_factory import create_llm, FallbackLLMWrapper, PROVIDER_DEFAULT_MODELS, extract_text_content
 
 
 class Turn(TypedDict):
@@ -64,7 +64,7 @@ def build_debate_graph(
             HumanMessage(content=messages_spec[1]["content"]),
         ]
         response = llm.invoke(lc_messages)
-        new_turn = {"speaker": "Agent A", "text": str(response.content).strip()}
+        new_turn = {"speaker": "Agent A", "text": extract_text_content(response)}
         return {
             "transcript": state["transcript"] + [new_turn]
         }
@@ -89,7 +89,7 @@ def build_debate_graph(
             HumanMessage(content=messages_spec[1]["content"]),
         ]
         response = llm.invoke(lc_messages)
-        new_turn = {"speaker": "Agent B", "text": str(response.content).strip()}
+        new_turn = {"speaker": "Agent B", "text": extract_text_content(response)}
         return {
             "transcript": state["transcript"] + [new_turn],
             "round_count": state["round_count"] + 1,
@@ -114,7 +114,7 @@ def build_debate_graph(
             HumanMessage(content=messages_spec[1]["content"]),
         ]
         response = llm.invoke(lc_messages)
-        new_turn = {"speaker": "Judge", "text": str(response.content).strip()}
+        new_turn = {"speaker": "Judge", "text": extract_text_content(response)}
         return {
             "transcript": state["transcript"] + [new_turn]
         }

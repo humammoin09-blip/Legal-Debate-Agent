@@ -26,12 +26,21 @@ load_dotenv()
 from llm_factory import (
     PROVIDER_MODELS,
     PROVIDER_DEFAULT_MODELS,
+    PROVIDER_ENV_KEYS,
     get_default_key_for_provider,
     FallbackLLMWrapper,
+    extract_text_content,
 )
 from debate_graph import build_debate_graph
 from prompts import DEBATE_PERSONAS
 from export_utils import generate_markdown_transcript, generate_pdf_transcript
+
+# Direct API key creation URLs for each provider
+PROVIDER_KEY_LINKS = {
+    "Groq": "https://console.groq.com",
+    "Google Gemini": "https://aistudio.google.com",
+    "OpenRouter": "https://openrouter.ai/keys",
+}
 
 # Page configuration
 st.set_page_config(
@@ -434,34 +443,94 @@ with st.sidebar:
         help="Choose the primary LLM provider for the debate.",
     )
 
-    # 4. Model Dropdown based on active provider
-    available_models = PROVIDER_MODELS.get(selected_provider, [])
-    default_model_for_prov = PROVIDER_DEFAULT_MODELS.get(selected_provider, available_models[0])
-    default_idx = available_models.index(default_model_for_prov) if default_model_for_prov in available_models else 0
+    # 4. Dynamic & Flexible Model Selector (Verified Models + Custom Model Typing)
+    custom_choice_label = "Custom Model (Type below...)"
+    available_models = list(PROVIDER_MODELS.get(selected_provider, []))
+    model_choices = available_models + [custom_choice_label]
 
-    selected_model = st.selectbox(
+    default_model_for_prov = PROVIDER_DEFAULT_MODELS.get(selected_provider, available_models[0])
+    saved_model = st.session_state.get(f"selected_model_{selected_provider}", default_model_for_prov)
+
+    # Determine default selectbox index
+    if saved_model in available_models:
+        default_idx = available_models.index(saved_model)
+    elif saved_model == custom_choice_label or st.session_state.get(f"custom_model_input_{selected_provider}"):
+        default_idx = len(model_choices) - 1
+    else:
+        default_idx = 0
+
+    chosen_selection = st.selectbox(
         f"Model ({selected_provider})",
-        options=available_models,
+        options=model_choices,
         index=default_idx,
+        help="Select a verified model from the list, or choose 'Custom Model (Type below...)' to type any model name directly.",
+        key=f"model_select_box_{selected_provider}",
     )
 
-    # 5. Primary Provider API Key Input
+    if chosen_selection == custom_choice_label:
+        custom_typed = st.text_input(
+            f"Enter Custom Model Name ({selected_provider})",
+            value=st.session_state.get(f"custom_model_input_{selected_provider}", ""),
+            placeholder=f"e.g. {'openai/gpt-oss-120b' if selected_provider == 'Groq' else 'gemini-3-flash-preview' if selected_provider == 'Google Gemini' else 'qwen/qwen3-coder:free'}",
+            help=f"Type any valid {selected_provider} model identifier to use directly.",
+            key=f"custom_model_text_{selected_provider}",
+        ).strip()
+        if custom_typed:
+            selected_model = custom_typed
+            st.session_state[f"selected_model_{selected_provider}"] = custom_typed
+            st.session_state[f"custom_model_input_{selected_provider}"] = custom_typed
+        else:
+            selected_model = default_model_for_prov
+            st.caption(f"ℹ️ Enter a custom model name above, or **{default_model_for_prov}** will be used.")
+    else:
+        selected_model = chosen_selection
+        st.session_state[f"selected_model_{selected_provider}"] = chosen_selection
+
+    # 5. Primary Provider API Key Input with Dynamic Precedence & Persistent State
     def get_effective_key(prov_name: str) -> str:
+        """Finds API key prioritizing user session input, then environment, then Streamlit secrets."""
+        session_key = st.session_state.get(f"api_key_{prov_name}", "")
+        if session_key and session_key.strip():
+            return session_key.strip().strip("'\"")
         env_key = get_default_key_for_provider(prov_name)
-        sec_key = (
-            st.secrets.get(f"{prov_name.upper().replace(' ', '_')}_API_KEY", "")
-            if hasattr(st, "secrets")
-            else ""
-        )
-        return env_key or sec_key
+        if env_key:
+            return env_key.strip().strip("'\"")
+        try:
+            if hasattr(st, "secrets") and st.secrets is not None:
+                candidates = PROVIDER_ENV_KEYS.get(prov_name, []) + [
+                    f"{prov_name.upper().replace(' ', '_')}_API_KEY",
+                    f"{prov_name.upper().replace(' ', '')}_API_KEY",
+                ]
+                for ck in candidates:
+                    if ck in st.secrets and st.secrets[ck]:
+                        return str(st.secrets[ck]).strip().strip("'\"")
+                    if ck.lower() in st.secrets and st.secrets[ck.lower()]:
+                        return str(st.secrets[ck.lower()]).strip().strip("'\"")
+        except Exception:
+            pass
+        return ""
 
     primary_default_key = get_effective_key(selected_provider)
     primary_api_key = st.text_input(
         f"{selected_provider} API Key",
         value=primary_default_key,
         type="password",
-        help=f"Enter API key for {selected_provider}.",
+        help=f"Enter your dynamic API key for {selected_provider}.",
+        key=f"primary_api_key_input_{selected_provider}",
     )
+    if primary_api_key.strip():
+        st.session_state[f"api_key_{selected_provider}"] = primary_api_key.strip().strip("'\"")
+
+    # Direct API key creation link for active provider
+    provider_link = PROVIDER_KEY_LINKS.get(selected_provider, "")
+    if provider_link:
+        st.markdown(
+            f'<div style="margin-top: -8px; margin-bottom: 12px; font-size: 0.83rem;">'
+            f'🔑 <a href="{provider_link}" target="_blank" rel="noopener noreferrer" style="color: #3B82F6; text-decoration: underline; font-weight: 500;">'
+            f'Get {selected_provider} API Key ↗</a>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     # Secondary API keys expander for automatic 429 fallback
     with st.expander("Fallback Providers (Auto-Retry on 429)", expanded=False):
@@ -469,10 +538,27 @@ with st.sidebar:
         fallback_keys = {}
         for p in provider_options:
             if p != selected_provider:
-                def_key = get_effective_key(p)
-                k_val = st.text_input(f"{p} Key", value=def_key, type="password", key=f"fallback_key_{p}")
-                if k_val.strip():
-                    fallback_keys[p] = k_val.strip()
+                fb_default = get_effective_key(p)
+                k_val = st.text_input(
+                    f"{p} Key",
+                    value=fb_default,
+                    type="password",
+                    key=f"fallback_key_input_{p}",
+                )
+                clean_k = k_val.strip().strip("'\"")
+                if clean_k:
+                    st.session_state[f"api_key_{p}"] = clean_k
+                    fallback_keys[p] = clean_k
+
+                fb_link = PROVIDER_KEY_LINKS.get(p, "")
+                if fb_link:
+                    st.markdown(
+                        f'<div style="margin-top: -8px; margin-bottom: 10px; font-size: 0.81rem;">'
+                        f'🔑 <a href="{fb_link}" target="_blank" rel="noopener noreferrer" style="color: #3B82F6; text-decoration: underline; font-weight: 500;">'
+                        f'Get {p} API Key ↗</a>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
 
     st.markdown("---")
 
@@ -596,11 +682,12 @@ chat_container = st.container()
 
 def render_turn(speaker: str, text: str):
     """Renders a single turn with custom speaker styles."""
+    clean_text = extract_text_content(text)
     if speaker == "Agent A":
         st.markdown(
             f'<div class="agent-card agent-a-box">'
             f'<div class="speaker-badge-a">Agent A (Arguing FOR)</div>'
-            f'<div class="turn-text">{text}</div>'
+            f'<div class="turn-text">{clean_text}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -608,7 +695,7 @@ def render_turn(speaker: str, text: str):
         st.markdown(
             f'<div class="agent-card agent-b-box">'
             f'<div class="speaker-badge-b">Agent B (Arguing AGAINST)</div>'
-            f'<div class="turn-text">{text}</div>'
+            f'<div class="turn-text">{clean_text}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -616,7 +703,7 @@ def render_turn(speaker: str, text: str):
         st.markdown(
             f'<div class="agent-card audience-box">'
             f'<div class="speaker-badge-audience">🎯 {speaker}</div>'
-            f'<div class="turn-text">{text}</div>'
+            f'<div class="turn-text">{clean_text}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -624,7 +711,7 @@ def render_turn(speaker: str, text: str):
         st.markdown(
             f'<div class="verdict-card">'
             f'<div class="verdict-header">Neutral Judge\'s Verdict & Final Assessment</div>'
-            f'<div class="verdict-body">{text}</div>'
+            f'<div class="verdict-body">{clean_text}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -642,8 +729,12 @@ if start_btn:
         st.warning("Please enter a debate topic or pick an example from the sidebar.")
         st.stop()
 
-    # 2. Validation: Active Provider API Key
-    eff_primary_key = primary_api_key.strip()
+    # 2. Validation: Active Provider API Key (prioritizing dynamic input)
+    eff_primary_key = (
+        st.session_state.get(f"api_key_{selected_provider}", "")
+        or primary_api_key.strip().strip("'\"")
+        or get_effective_key(selected_provider)
+    ).strip().strip("'\"")
     if not eff_primary_key:
         st.error(f"{selected_provider} API Key is missing. Please enter it in the sidebar.")
         st.stop()
@@ -682,7 +773,12 @@ if start_btn:
 
     # Fallback handler callback
     def on_fallback_triggered(from_p: str, to_p: str, err_desc: str):
-        msg = f"Switched to {to_p} from {from_p} due to rate limit (429)."
+        if from_p == to_p:
+            # Same-provider model recovery
+            msg = err_desc if err_desc else f"Recovered using verified default model on {to_p}."
+        else:
+            reason = "rate limit (429)" if ("429" in err_desc.lower() or "rate" in err_desc.lower()) else "failover"
+            msg = f"Switched from {from_p} to {to_p} due to {reason}."
         st.session_state.fallback_notifications.append(msg)
         st.toast(msg, icon="🔄")
 
@@ -772,15 +868,24 @@ if start_btn:
     except Exception as e:
         error_msg = str(e)
         st.session_state.is_running = False
-        if "rate_limit" in error_msg.lower() or "429" in error_msg:
-            st.error(
-                "Rate Limit Exceeded across all configured providers: "
+        err_lower = error_msg.lower()
+        if "rate_limit" in err_lower or "429" in error_msg or "resource_exhausted" in err_lower:
+            st.warning(
+                "⏳ **Rate Limit Exceeded:** The request was rate-limited across configured providers. "
                 "Please wait 30-60 seconds or configure additional fallback provider keys in the sidebar."
             )
-        elif "api_key" in error_msg.lower() or "401" in error_msg or "unauthorized" in error_msg.lower():
-            st.error(f"Invalid API Key for {selected_provider}: Please verify your key in the sidebar.")
+        elif "401" in error_msg or "unauthorized" in err_lower or "invalid_api_key" in err_lower or "api_key_invalid" in err_lower or "api key not valid" in err_lower:
+            st.error(
+                f"🔑 **Invalid API Key for {selected_provider}:** Please verify your key in the sidebar "
+                f"or generate a new one using the link below the input."
+            )
+        elif "not found" in err_lower or "404" in error_msg or "does not exist" in err_lower or "model" in err_lower:
+            st.warning(
+                f"⚠️ **Model Unavailable / Failed:** The model `{selected_model}` could not be found or executed by **{selected_provider}**. "
+                f"Please verify the model identifier or select a standard working model from the dropdown."
+            )
         else:
-            st.error(f"An unexpected error occurred: {error_msg}")
+            st.error(f"⚠️ **Debate Stopped:** An unexpected issue occurred ({selected_provider}): {error_msg}")
 
 
 # ----------------- POST-DEBATE FOLLOW-UP CROSS EXAMINATION -----------------
@@ -809,7 +914,11 @@ if st.session_state.debate_completed and st.session_state.transcript:
         st.session_state.transcript.append(audience_entry)
 
         # Run 1 quick follow-up turn (Agent A, Agent B, Judge) addressing the user's interjection
-        eff_primary_key = primary_api_key.strip()
+        eff_primary_key = (
+            st.session_state.get(f"api_key_{selected_provider}", "")
+            or primary_api_key.strip().strip("'\"")
+            or get_effective_key(selected_provider)
+        ).strip().strip("'\"")
         if eff_primary_key:
             providers_chain = [
                 {
@@ -827,9 +936,16 @@ if st.session_state.debate_completed and st.session_state.transcript:
                     }
                 )
 
+            def on_follow_fallback(from_p: str, to_p: str, err_desc: str):
+                if from_p == to_p:
+                    msg = err_desc if err_desc else f"Recovered using verified default model on {to_p}."
+                else:
+                    msg = f"Switched from {from_p} to {to_p}."
+                st.toast(msg, icon="🔄")
+
             llm_wrapper = FallbackLLMWrapper(
                 providers_configs=providers_chain,
-                on_fallback=lambda f, t, e: st.toast(f"Switched to {t}", icon="🔄"),
+                on_fallback=on_follow_fallback,
                 on_call_completed=increment_call_counter,
             )
 
@@ -858,7 +974,11 @@ if st.session_state.debate_completed and st.session_state.transcript:
                 )
                 st.rerun()
             except Exception as follow_err:
-                st.error(f"Follow-up error: {follow_err}")
+                err_text = str(follow_err)
+                if "not found" in err_text.lower() or "404" in err_text or "model" in err_text.lower():
+                    st.warning(f"⚠️ Follow-up failed: Model `{selected_model}` was not recognized or failed on {selected_provider}.")
+                else:
+                    st.error(f"Follow-up error: {follow_err}")
 
 
 # ----------------- EXPORT & DOWNLOAD SECTION -----------------
