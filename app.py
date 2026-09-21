@@ -27,7 +27,6 @@ from llm_factory import (
     PROVIDER_MODELS,
     PROVIDER_DEFAULT_MODELS,
     PROVIDER_ENV_KEYS,
-    get_default_key_for_provider,
     FallbackLLMWrapper,
     extract_text_content,
 )
@@ -486,54 +485,48 @@ with st.sidebar:
         selected_model = chosen_selection
         st.session_state[f"selected_model_{selected_provider}"] = chosen_selection
 
-    # 5. Primary Provider API Key Input with Dynamic Precedence & Persistent State
-    def get_effective_key(prov_name: str) -> str:
-        """Finds API key prioritizing user session input, then environment, then Streamlit secrets."""
-        session_key = st.session_state.get(f"api_key_{prov_name}", "")
-        if session_key and session_key.strip():
-            return session_key.strip().strip("'\"")
-        env_key = get_default_key_for_provider(prov_name)
-        if env_key:
-            return env_key.strip().strip("'\"")
-        try:
-            if hasattr(st, "secrets") and st.secrets is not None:
-                candidates = PROVIDER_ENV_KEYS.get(prov_name, []) + [
-                    f"{prov_name.upper().replace(' ', '_')}_API_KEY",
-                    f"{prov_name.upper().replace(' ', '')}_API_KEY",
-                ]
-                for ck in candidates:
-                    if ck in st.secrets and st.secrets[ck]:
-                        return str(st.secrets[ck]).strip().strip("'\"")
-                    if ck.lower() in st.secrets and st.secrets[ck.lower()]:
-                        return str(st.secrets[ck.lower()]).strip().strip("'\"")
-        except Exception:
-            pass
-        return ""
+    # 5. Primary Provider API Key Input with Dynamic State & Safe Empty Start
+    for prov in provider_options:
+        if f"api_key_{prov}" not in st.session_state:
+            st.session_state[f"api_key_{prov}"] = ""
 
-    primary_default_key = get_effective_key(selected_provider)
+    current_p_val = st.session_state.get(f"api_key_{selected_provider}", "")
     primary_api_key = st.text_input(
         f"{selected_provider} API Key",
-        value=primary_default_key,
+        value=current_p_val,
         type="password",
         help=f"Enter your dynamic API key for {selected_provider}.",
         key=f"primary_api_key_input_{selected_provider}",
     )
-    if primary_api_key.strip():
-        clean_p_key = primary_api_key.strip().strip("'\"")
-        st.session_state[f"api_key_{selected_provider}"] = clean_p_key
-        if selected_provider == "Groq":
-            os.environ["GROQ_API_KEY"] = clean_p_key
+    # Synchronize session state dynamically with text input (including empty string "")
+    clean_p_key = primary_api_key.strip().strip("'\"")
+    st.session_state[f"api_key_{selected_provider}"] = clean_p_key
+    if selected_provider == "Groq":
+        os.environ["GROQ_API_KEY"] = clean_p_key
+    elif selected_provider == "Google Gemini":
+        os.environ["GEMINI_API_KEY"] = clean_p_key
+        os.environ["GOOGLE_API_KEY"] = clean_p_key
+    elif selected_provider == "OpenRouter":
+        os.environ["OPENROUTER_API_KEY"] = clean_p_key
 
-    # Direct API key creation link for active provider
-    provider_link = PROVIDER_KEY_LINKS.get(selected_provider, "")
-    if provider_link:
-        st.markdown(
-            f'<div style="margin-top: -8px; margin-bottom: 12px; font-size: 0.83rem;">'
-            f'🔑 <a href="{provider_link}" target="_blank" rel="noopener noreferrer" style="color: #3B82F6; text-decoration: underline; font-weight: 500;">'
-            f'Get {selected_provider} API Key ↗</a>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+    # Direct API key creation link & clear mechanism for active provider
+    col_key_link, col_key_clear = st.columns([3, 1])
+    with col_key_link:
+        provider_link = PROVIDER_KEY_LINKS.get(selected_provider, "")
+        if provider_link:
+            st.markdown(
+                f'<div style="margin-top: -4px; margin-bottom: 12px; font-size: 0.83rem;">'
+                f'🔑 <a href="{provider_link}" target="_blank" rel="noopener noreferrer" style="color: #3B82F6; text-decoration: underline; font-weight: 500;">'
+                f'Get {selected_provider} API Key ↗</a>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+    with col_key_clear:
+        if clean_p_key:
+            if st.button("Clear", key=f"clear_btn_{selected_provider}", help=f"Clear {selected_provider} API key"):
+                st.session_state[f"api_key_{selected_provider}"] = ""
+                st.session_state[f"primary_api_key_input_{selected_provider}"] = ""
+                st.rerun()
 
     # Secondary API keys expander for automatic 429 fallback
     with st.expander("Fallback Providers (Auto-Retry on 429)", expanded=False):
@@ -541,16 +534,16 @@ with st.sidebar:
         fallback_keys = {}
         for p in provider_options:
             if p != selected_provider:
-                fb_default = get_effective_key(p)
+                fb_val = st.session_state.get(f"api_key_{p}", "")
                 k_val = st.text_input(
                     f"{p} Key",
-                    value=fb_default,
+                    value=fb_val,
                     type="password",
                     key=f"fallback_key_input_{p}",
                 )
                 clean_k = k_val.strip().strip("'\"")
+                st.session_state[f"api_key_{p}"] = clean_k
                 if clean_k:
-                    st.session_state[f"api_key_{p}"] = clean_k
                     fallback_keys[p] = clean_k
 
                 fb_link = PROVIDER_KEY_LINKS.get(p, "")
@@ -733,11 +726,7 @@ if start_btn:
         st.stop()
 
     # 2. Validation: Active Provider API Key (prioritizing dynamic input)
-    eff_primary_key = (
-        primary_api_key.strip().strip("'\"")
-        or st.session_state.get(f"api_key_{selected_provider}", "")
-        or get_effective_key(selected_provider)
-    ).strip().strip("'\"")
+    eff_primary_key = st.session_state.get(f"api_key_{selected_provider}", "").strip().strip("'\"")
     if not eff_primary_key:
         st.error(f"{selected_provider} API Key is missing. Please enter it in the sidebar.")
         st.stop()
@@ -917,11 +906,7 @@ if st.session_state.debate_completed and st.session_state.transcript:
         st.session_state.transcript.append(audience_entry)
 
         # Run 1 quick follow-up turn (Agent A, Agent B, Judge) addressing the user's interjection
-        eff_primary_key = (
-            st.session_state.get(f"api_key_{selected_provider}", "")
-            or primary_api_key.strip().strip("'\"")
-            or get_effective_key(selected_provider)
-        ).strip().strip("'\"")
+        eff_primary_key = st.session_state.get(f"api_key_{selected_provider}", "").strip().strip("'\"")
         if eff_primary_key:
             providers_chain = [
                 {
