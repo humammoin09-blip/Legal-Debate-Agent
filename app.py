@@ -272,53 +272,144 @@ def get_theme_css(theme: str) -> str:
         font-size: 2.25rem;
         font-weight: 700;
         letter-spacing: -0.5px;
-        color: #0F172A;
+        color: #0F172A !important;
         margin-bottom: 0.25rem;
     }
     .subtitle {
-        color: #64748B;
+        color: #475569 !important;
         font-size: 0.98rem;
         line-height: 1.55;
         margin-bottom: 1.75rem;
     }
     .agent-a-box {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-left: 4px solid #2563EB;
+        background: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-left: 4px solid #2563EB !important;
     }
     .agent-b-box {
-        background: #FFFFFF;
-        border: 1px solid #E2E8F0;
-        border-left: 4px solid #DC2626;
+        background: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+        border-left: 4px solid #DC2626 !important;
     }
     .audience-box {
-        background: #FFFBEB;
-        border: 1px solid #FDE68A;
-        border-left: 4px solid #F59E0B;
+        background: #FFFBEB !important;
+        border: 1px solid #FDE68A !important;
+        border-left: 4px solid #F59E0B !important;
     }
     .turn-text {
-        color: #334155;
+        color: #1E293B !important;
     }
     .verdict-card {
-        background: #F8FAFC;
-        border: 1.5px solid #6366F1;
-        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08);
+        background: #F8FAFC !important;
+        border: 1.5px solid #6366F1 !important;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.08) !important;
     }
     .verdict-header {
-        color: #4F46E5;
+        color: #4F46E5 !important;
     }
     .verdict-body {
-        color: #1E293B;
+        color: #0F172A !important;
     }
     .thinking-box {
-        background: #F1F5F9;
-        border: 1px solid #E2E8F0;
-        color: #475569;
+        background: #F1F5F9 !important;
+        border: 1px solid #CBD5E1 !important;
+        color: #334155 !important;
     }
     .usage-badge {
-        background: #F1F5F9;
-        border: 1px solid #E2E8F0;
-        color: #334155;
+        background: #F1F5F9 !important;
+        border: 1px solid #CBD5E1 !important;
+        color: #0F172A !important;
+    }
+
+    /* Input Fields, Text Areas & Select Boxes - Light Mode */
+    input, textarea, select,
+    .stTextInput input, .stTextArea textarea,
+    [data-baseweb="input"] input, [data-baseweb="base-input"] textarea,
+    [data-baseweb="select"] div {
+        color: #0F172A !important;
+        background-color: #FFFFFF !important;
+    }
+    [data-baseweb="input"], [data-baseweb="base-input"],
+    div[data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+        border-color: #CBD5E1 !important;
+    }
+    input::placeholder, textarea::placeholder,
+    [data-baseweb="input"] input::placeholder,
+    [data-baseweb="base-input"] textarea::placeholder {
+        color: #64748B !important;
+        opacity: 1 !important;
+    }
+    label[data-testid="stWidgetLabel"],
+    .stTextInput label, .stTextArea label,
+    .stSelectbox label, .stSlider label {
+        color: #0F172A !important;
+        font-weight: 600 !important;
+    }
+
+    /* Buttons & Export Buttons - Light Mode */
+    .stButton > button, .stDownloadButton > button,
+    button[data-testid="stBaseButton-secondary"] {
+        background-color: #FFFFFF !important;
+        color: #0F172A !important;
+        border: 1px solid #CBD5E1 !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover,
+    button[data-testid="stBaseButton-secondary"]:hover {
+        background-color: #F1F5F9 !important;
+        color: #0F172A !important;
+        border-color: #94A3B8 !important;
+    }
+    .stButton > button[kind="primary"],
+    button[data-testid="stBaseButton-primary"] {
+        background-color: #2563EB !important;
+        color: #FFFFFF !important;
+        border: 1px solid #1D4ED8 !important;
+    }
+    .stButton > button[kind="primary"]:hover,
+    button[data-testid="stBaseButton-primary"]:hover {
+        background-color: #1D4ED8 !important;
+        color: #FFFFFF !important;
+    }
+
+    /* Expanders & Sidebar - Light Mode */
+    [data-testid="stExpander"] {
+        background-color: #FFFFFF !important;
+        border: 1px solid #E2E8F0 !important;
+    }
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] summary * {
+        color: #0F172A !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #F8FAFC !important;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label {
+        color: #0F172A !important;
+    }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
+        color: #334155 !important;
+    }
+
+    /* SVG Icons & Header Toolbar Links - Light Mode */
+    svg, [data-testid="stHeader"] svg, [data-testid="stToolbar"] svg,
+    [data-testid="stSidebarCollapseButton"] svg,
+    [data-testid="stExpanderToggleIcon"] svg,
+    [data-testid="stIcon"] svg, header button svg,
+    a svg {
+        fill: #1E293B !important;
+        color: #1E293B !important;
+    }
+    .stButton > button[kind="primary"] svg,
+    button[data-testid="stBaseButton-primary"] svg {
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
+    }
+    a, a:visited, [data-testid="stHeader"] a, [data-testid="stToolbar"] a {
+        color: #2563EB !important;
     }
     """
 
@@ -382,6 +473,95 @@ def get_theme_css(theme: str) -> str:
         background: #1E293B !important;
         border: 1px solid #334155 !important;
         color: #E2E8F0 !important;
+    }
+
+    /* Input Fields, Text Areas & Select Boxes - Dark Mode */
+    input, textarea, select,
+    .stTextInput input, .stTextArea textarea,
+    [data-baseweb="input"] input, [data-baseweb="base-input"] textarea,
+    [data-baseweb="select"] div {
+        color: #F8FAFC !important;
+        background-color: #1E293B !important;
+    }
+    [data-baseweb="input"], [data-baseweb="base-input"],
+    div[data-baseweb="select"] > div {
+        background-color: #1E293B !important;
+        border-color: #334155 !important;
+    }
+    input::placeholder, textarea::placeholder,
+    [data-baseweb="input"] input::placeholder,
+    [data-baseweb="base-input"] textarea::placeholder {
+        color: #94A3B8 !important;
+        opacity: 1 !important;
+    }
+    label[data-testid="stWidgetLabel"],
+    .stTextInput label, .stTextArea label,
+    .stSelectbox label, .stSlider label {
+        color: #F8FAFC !important;
+        font-weight: 600 !important;
+    }
+
+    /* Buttons & Export Buttons - Dark Mode */
+    .stButton > button, .stDownloadButton > button,
+    button[data-testid="stBaseButton-secondary"] {
+        background-color: #1E293B !important;
+        color: #F8FAFC !important;
+        border: 1px solid #334155 !important;
+    }
+    .stButton > button:hover, .stDownloadButton > button:hover,
+    button[data-testid="stBaseButton-secondary"]:hover {
+        background-color: #334155 !important;
+        color: #FFFFFF !important;
+    }
+    .stButton > button[kind="primary"],
+    button[data-testid="stBaseButton-primary"] {
+        background-color: #3B82F6 !important;
+        color: #FFFFFF !important;
+        border: 1px solid #2563EB !important;
+    }
+    .stButton > button[kind="primary"]:hover,
+    button[data-testid="stBaseButton-primary"]:hover {
+        background-color: #2563EB !important;
+        color: #FFFFFF !important;
+    }
+
+    /* Expanders & Sidebar - Dark Mode */
+    [data-testid="stExpander"] {
+        background-color: #1E293B !important;
+        border: 1px solid #334155 !important;
+    }
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] summary * {
+        color: #F8FAFC !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stSidebar"] {
+        background-color: #0F172A !important;
+    }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label {
+        color: #F8FAFC !important;
+    }
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
+        color: #94A3B8 !important;
+    }
+
+    /* SVG Icons & Header Toolbar Links - Dark Mode */
+    svg, [data-testid="stHeader"] svg, [data-testid="stToolbar"] svg,
+    [data-testid="stSidebarCollapseButton"] svg,
+    [data-testid="stExpanderToggleIcon"] svg,
+    [data-testid="stIcon"] svg, header button svg,
+    a svg {
+        fill: #F8FAFC !important;
+        color: #F8FAFC !important;
+    }
+    .stButton > button[kind="primary"] svg,
+    button[data-testid="stBaseButton-primary"] svg {
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
+    }
+    a, a:visited, [data-testid="stHeader"] a, [data-testid="stToolbar"] a {
+        color: #60A5FA !important;
     }
     """
 
