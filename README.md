@@ -80,4 +80,3 @@ The application will launch in your browser at `http://localhost:8501`.
    GEMINI_API_KEY = "..."
    OPENROUTER_API_KEY = "sk-or-v1-..."
    ```
-4. Click **Deploy!**
