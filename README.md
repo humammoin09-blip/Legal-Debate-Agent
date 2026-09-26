@@ -70,6 +70,7 @@ The application will launch in your browser at `http://localhost:8501`.
 
 ---
 
+
 ## ☁️ Deploying to Streamlit Community Cloud (Free)
 
 1. Push your repository to **GitHub**.
@@ -79,4 +80,4 @@ The application will launch in your browser at `http://localhost:8501`.
    GROQ_API_KEY = "gsk_..."
    GEMINI_API_KEY = "..."
    OPENROUTER_API_KEY = "sk-or-v1-..."
-   ```
+   ``'
