@@ -34,8 +34,6 @@ An autonomous multi-agent debate application built with **Python**, **LangGraph*
 ├── .env.example         # Template for environment variables (GROQ, GEMINI, OPENROUTER)
 └── README.md            # Documentation & deployment guide
 ```
-
-
 ##  Quick Start (Local Setup)
 
 ### 1. Clone or Open the Repository
